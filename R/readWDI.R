@@ -38,7 +38,7 @@ readWDI <- function(subtype) {
     subtype
   )
 
-  x <- readr::read_rds("WDI_15_04_2024.Rds")
+  x <- readr::read_rds("WDI_11_04_2025.Rds")
 
   possibleSubtypes <- colnames(x)[!colnames(x) %in% c("iso3c", "iso2c", "country", "year")]
 
@@ -57,6 +57,10 @@ readWDI <- function(subtype) {
 #' @param x MAgPIE object returned by readWDI
 #' @order 3
 convertWDI <- function(x, subtype) {
+
+  # Note: Part of convertWDI and readWDI are problematic in many ways
+  # --> these problems are solved in the following commits
+
   # Add some aliases for easier referencing
   subtype <- switch(
     subtype,
@@ -76,11 +80,29 @@ convertWDI <- function(x, subtype) {
     vcat("Warning: Kosovo left out of conversion and has differing population values from FAO", verbosity = 2)
   }
 
+  # Must occur before GPDuc (which seems to only work with iso3c)
   getCells(x) <- countrycode::countrycode(getCells(x),
                                           "iso2c",
                                           "iso3c",
                                           custom_match = c("JG" = "JEY"),
                                           warn = FALSE)
+
+  # Check the structure of the underlying data
+  strNames <- getCells(x)
+  # Find indices where region names are not NA or empty
+  validIndices <- which(!is.na(strNames) & strNames != "")
+  # Create a new object with only valid regions
+  x <- x[validIndices, , ]
+
+  # Normalization of GDP due to update units by the World Bank
+  if (subtype == "NY.GDP.MKTP.PP.KD") {
+    x <- GDPuc::toolConvertGDP(
+      gdp = x,
+      unit_in = "constant 2021 Int$PPP",
+      unit_out = "constant 2017 Int$PPP",
+      source = "wb_wdi"
+    )
+  }
 
   toolGeneralConvert(x)
 }
